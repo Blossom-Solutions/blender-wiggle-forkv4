@@ -21,15 +21,6 @@ curframe = None
 skip_jiggle = False
 skip_handler = False
 
-######## NEW STUFF STARTS ############################################
-#Consider replacing generic python object with an actual node that doesn't need to be converted to dict on each access:
-#class Jiggle_Node(bpy.types.PropertyGroup):
-#   name: bpy.props.StringProperty()
-#   children: bpy.props.CollectionProperty(type=Jiggle_Node)
-#   bones: bpy.props.CollectionProperty(type=Jiggle_Node)
-#   type: bpy.props.StringProperty() - is this necessary?
-
-
 def find_parent(item, nodes):
     if item.parent:
         if item.parent.name in nodes:
@@ -807,58 +798,53 @@ def reset_jiggle_tree(jiggle_tree, ob=None):
                     generate_jiggle_tree()
                     
 @persistent
-def jiggle_pre(self):
+def jiggle_pre(scene):
     global curframe
 
     try:
-        jiggle_tree = bpy.context.scene['jiggle_tree'].to_dict()
+        jiggle_tree = bpy.context.scene['jiggle_tree']
     except:
         generate_jiggle_tree()
-        jiggle_tree = bpy.context.scene['jiggle_tree'].to_dict()
+        jiggle_tree = bpy.context.scene['jiggle_tree']
         
     jiggle_tree_pre(jiggle_tree)
             
             
 
 @persistent
-def jiggle_post(self,depsgraph):
+def jiggle_post(scene):
     global curframe 
     global render
     global skip_handler
     global skip_jiggle
-    #print("%s %s" %(depsgraph.view_layer.name, bpy.context.view_layer.name))
     if (skip_handler):
         return
     skip_handler = True
-    if (depsgraph.view_layer.name == bpy.context.view_layer.name):
-        bpy.context.scene.frame_set(bpy.context.scene.frame_current)
-                
-        if bpy.context.screen.is_animation_playing and curframe and (abs(bpy.context.scene.frame_current - curframe) > 10):
-            if (abs(bpy.context.scene.frame_current - curframe) > (bpy.context.scene.frame_end - bpy.context.scene.frame_start - 10)) and not bpy.context.scene.jiggle_reset:
-                print('looping')
-                skip_jiggle = False
-            else:
-                skip_jiggle = True
-                print('anim drop')
-        elif (bpy.context.screen.is_animation_playing == False) and curframe and (bpy.context.scene.frame_current != curframe+1):
-            skip_jiggle = True
-            #print('scrubbing')
-        else:
+    bpy.context.scene.frame_set(bpy.context.scene.frame_current)
+
+    screen = bpy.context.screen
+    is_playing = screen.is_animation_playing if screen else False
+
+    if is_playing and curframe and (abs(bpy.context.scene.frame_current - curframe) > 10):
+        if (abs(bpy.context.scene.frame_current - curframe) > (bpy.context.scene.frame_end - bpy.context.scene.frame_start - 10)) and not bpy.context.scene.jiggle_reset:
             skip_jiggle = False
-            #print('jiggling')
-            #print(bpy.context.screen.is_animation_playing)
-            
-        curframe = bpy.context.scene.frame_current
-        #print("post %d %d" %(curframe, bpy.context.scene.frame_current))
-            
-        jiggle_tree = bpy.context.scene['jiggle_tree'].to_dict()
-        jiggle_tree_post2(jiggle_tree) 
+        else:
+            skip_jiggle = True
+    elif (not is_playing) and curframe and (bpy.context.scene.frame_current != curframe+1):
+        skip_jiggle = True
+    else:
+        skip_jiggle = False
+
+    curframe = bpy.context.scene.frame_current
+
+    jiggle_tree = bpy.context.scene['jiggle_tree']
+    jiggle_tree_post2(jiggle_tree)
     skip_handler = False     
                 
 ######## NEW STUFF ENDS #######################################################################
         
 @persistent
-def jiggle_render(self):
+def jiggle_render(scene):
     global render
     print("render triggered frame %d" %bpy.context.scene.frame_current)
     #bpy.context.scene.frame_set(bpy.context.scene.frame_current)
@@ -866,7 +852,7 @@ def jiggle_render(self):
     render = True
     
 @persistent
-def render_post(self):
+def render_post(scene):
     global render
     render = False
 
@@ -885,7 +871,7 @@ class reset_wiggle(bpy.types.Operator):
         return True
     
     def execute(self,context):
-        jiggle_tree = bpy.context.scene['jiggle_tree'].to_dict()
+        jiggle_tree = bpy.context.scene['jiggle_tree']
         reset_jiggle_tree(jiggle_tree)   
         return {'FINISHED'}
 
@@ -901,7 +887,7 @@ class select_wiggle_bones(bpy.types.Operator):
     def execute(self,context):
         bpy.ops.pose.select_all(action='DESELECT')
         ob = context.object
-        jiggle_tree = bpy.context.scene['jiggle_tree'].to_dict()
+        jiggle_tree = bpy.context.scene['jiggle_tree']
         if ob.name in jiggle_tree:
             select_bones(jiggle_tree[ob.name]['bones'], ob)     
         return {'FINISHED'}
@@ -1092,11 +1078,11 @@ def register():
     bpy.utils.register_class(reset_wiggle)
     bpy.utils.register_class(select_wiggle_bones)
     
-    bpy.types.PoseBone.jiggle_spring = bpy.props.FloatVectorProperty(default=Vector((0,0,0)))
-    bpy.types.PoseBone.jiggle_velocity = bpy.props.FloatVectorProperty(default=Vector((0,0,0)))
+    bpy.types.PoseBone.jiggle_spring = bpy.props.FloatVectorProperty(default=(0.0, 0.0, 0.0))
+    bpy.types.PoseBone.jiggle_velocity = bpy.props.FloatVectorProperty(default=(0.0, 0.0, 0.0))
     
-    bpy.types.PoseBone.jiggle_spring2 = bpy.props.FloatVectorProperty(default=Vector((0,0,0)))
-    bpy.types.PoseBone.jiggle_velocity2 = bpy.props.FloatVectorProperty(default=Vector((0,0,0)))
+    bpy.types.PoseBone.jiggle_spring2 = bpy.props.FloatVectorProperty(default=(0.0, 0.0, 0.0))
+    bpy.types.PoseBone.jiggle_velocity2 = bpy.props.FloatVectorProperty(default=(0.0, 0.0, 0.0))
     
     bpy.types.Scene.jiggle_enable = bpy.props.BoolProperty(
         name = 'Enabled:',
@@ -1245,59 +1231,3 @@ def unregister():
 
 if __name__ == "__main__":
     register()
-
-#1.4.4 CHANGELOG
-
-#bugfix: translational jiggle not reset on startframe
-#bugfix: bake operator didn't like channel index specified
-#feature: active toggle useful for animating a preroll without jiggle
-#feature: operator to select other enabled wiggle bones in armature 
-#feature: frame rate scaling of jiggle physics
-#feature: looping physics toggle
-
-#1.5 CHANGELOG
-
-#optimization: speedup by avoiding view_layer.updates() 
-
-#bone stretching now properly matches jiggle dampening (it was always fully damped before)
-
-#constraint logic:
-#   matrix logic modified when presence of 'CHILD_OF' constraint detected.
-#   note that constraint order makes a big difference in terms of whether things work. Eg:
-#       -maintain volume must come after child of or it'll freak out
-#       -track to must come before child of or results will be weird
-
-#cleanup: cleared out some old code, much remains!
-
-#b12:
-#scale respects initial scale when jiggle enabled
-#post bake disabling shouldn't mess up bone enabled states anymore
-#additive is optional when baking wiggle
-
-#TODO
-
-#   -jiggle_tree needs to be a better stored variable
-#   -can constraints still get passed jiggle motion? (tricky order of operation, maybe only childof?) [KINDA DONE]
-
-#NEXT PRIORITIES
-
-#   -investigate why renders don't work
-#   -should only disable baked bones?
-#   -y-stretch should jiggle [DONE]
-#   -make sure y-stretch works with preserve volume constraint [DONE - with caveats]
-
-#FUTURE COLLISION STUFF
-
-#   -better collision margin (fake bone extension)
-#   -collision bounce/velocity transfer
-#   -look into division by zero (i think in friction code)
-#   -look into frictions that seem to still pull bones incorrectly
-#   -make collision work with stretchy bones and amplitude jiggle
-#   -per bone collider collection option
-#   -box collider for better torso/ponytail collision scenarios
-#   -stretched sphere colliders? capsule colliders?
-
-#lower priority:
-#cleaner code for property updates (one function for multiple properties)
-#look into property groupings again (we're already using for c_items, right?)
-#any other cleanups
